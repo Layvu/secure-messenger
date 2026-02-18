@@ -35,7 +35,9 @@
     "libsodium-wrappers": "^0.8.2",
     "rxdb": "^16.21.1",
     "rxjs": "~7.8.0",
+    "socket.io-client": "^4.8.3",
     "tslib": "^2.3.0",
+    "z-schema": "^9.0.1",
     "zone.js": "~0.15.0"
   },
   "devDependencies": {

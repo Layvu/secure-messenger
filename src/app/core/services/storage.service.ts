@@ -1,7 +1,12 @@
 import { Injectable } from '@angular/core';
 import { createRxDatabase, RxDatabase, removeRxDatabase } from 'rxdb';
+import { wrappedValidateZSchemaStorage } from 'rxdb/plugins/validate-z-schema';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
-import * as CryptoJS from 'crypto-js';
+import { addRxPlugin } from 'rxdb';
+import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
+import CryptoJS from 'crypto-js';
+
+addRxPlugin(RxDBDevModePlugin);
 
 const usersSchema = {
   title: 'users schema',
@@ -10,7 +15,7 @@ const usersSchema = {
   type: 'object',
   properties: {
     id: { type: 'string', maxLength: 100 },
-    username: { type: 'string' }, // Зашифровано
+    username: { type: 'string' },
   },
   required: ['id', 'username'],
 };
@@ -24,7 +29,7 @@ const messagesSchema = {
     id: { type: 'string', maxLength: 100 },
     senderId: { type: 'string' },
     receiverId: { type: 'string' },
-    text: { type: 'string' }, // Зашифровано
+    text: { type: 'string' },
     timestamp: { type: 'number' },
     status: { type: 'string' },
   },
@@ -37,8 +42,8 @@ const sessionsSchema = {
   primaryKey: 'id',
   type: 'object',
   properties: {
-    id: { type: 'string', maxLength: 100 }, // Session ID
-    state: { type: 'string' }, // Зашифрованный ratchet state (JSON)
+    id: { type: 'string', maxLength: 100 },
+    state: { type: 'string' },
   },
   required: ['id', 'state'],
 };
@@ -50,27 +55,71 @@ export class StorageService {
   private db: RxDatabase | null = null;
   private encryptionKey: string | null = null;
 
-  async initDB(dbName: string, encryptionKey: string) {
-    if (this.db) return;
-    const fullDbName = 'messenger_secure_' + dbName;
-    try {
-      await removeRxDatabase(fullDbName, getRxStorageDexie());
-      console.log('Existing DB removed for clean init');
-    } catch (err) {
-      console.warn('No existing DB to remove:', err);
+  async initDB(dbName: string, encryptionKey: string): Promise<void> {
+    // Если уже открыта та же база, ничего не делаем
+    if (this.db && this.db.name === 'messenger_secure_' + dbName) {
+      return;
     }
+
+    // Если открыта другая база, закрываем её
+    if (this.db) {
+      await this.db.close();
+      this.db = null;
+      this.encryptionKey = null;
+    }
+
+    const fullDbName = 'messenger_secure_' + dbName;
     this.encryptionKey = encryptionKey;
+
+    try {
+      await this.tryOpenDatabase(fullDbName);
+    } catch (error) {
+      console.error('Failed to open database, attempting to remove and recreate...', error);
+      await this.removeAndRecreateDatabase(fullDbName);
+    }
+  }
+
+  private async tryOpenDatabase(fullDbName: string): Promise<void> {
+    // Создаём storage с валидацией
+    const storageWithValidation = wrappedValidateZSchemaStorage({
+      storage: getRxStorageDexie(),
+    });
+
     this.db = await createRxDatabase({
       name: fullDbName,
-      storage: getRxStorageDexie(),
+      storage: storageWithValidation,
       multiInstance: true,
+      ignoreDuplicate: true,
     });
+
     await this.db.addCollections({
       users: { schema: usersSchema },
       messages: { schema: messagesSchema },
       sessions: { schema: sessionsSchema },
     });
-    console.log('Secure Storage Initialized');
+
+    console.log('Storage initialized:', fullDbName);
+  }
+
+  private async removeAndRecreateDatabase(fullDbName: string): Promise<void> {
+    try {
+      await removeRxDatabase(fullDbName, getRxStorageDexie());
+      console.log('Removed existing database:', fullDbName);
+      await this.tryOpenDatabase(fullDbName);
+      console.log('Storage recreated:', fullDbName);
+    } catch (retryError) {
+      console.error('Failed to recreate database:', retryError);
+      throw retryError;
+    }
+  }
+
+  async closeDB(): Promise<void> {
+    if (this.db) {
+      await this.db.close();
+      this.db = null;
+      this.encryptionKey = null;
+      console.log('Storage closed');
+    }
   }
 
   private encrypt(data: string): string {
@@ -86,22 +135,19 @@ export class StorageService {
 
   async addUser(user: any) {
     if (!this.db) throw new Error('DB not initialized');
-    const secureUser = { ...user };
-    secureUser.username = this.encrypt(user.username);
+    const secureUser = { ...user, username: this.encrypt(user.username) };
     return this.db.collections['users'].insert(secureUser);
   }
 
   async addMessage(msg: any) {
     if (!this.db) throw new Error('DB not initialized');
-    const secureMsg = { ...msg };
-    secureMsg.text = this.encrypt(msg.text);
+    const secureMsg = { ...msg, text: this.encrypt(msg.text) };
     return this.db.collections['messages'].insert(secureMsg);
   }
 
   async addSession(session: any) {
     if (!this.db) throw new Error('DB not initialized');
-    const secureSession = { ...session };
-    secureSession.state = this.encrypt(session.state);
+    const secureSession = { ...session, state: this.encrypt(session.state) };
     return this.db.collections['sessions'].insert(secureSession);
   }
 
