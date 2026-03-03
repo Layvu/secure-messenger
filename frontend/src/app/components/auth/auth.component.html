@@ -1,0 +1,28 @@
+<div class="auth-container">
+  <h2>Регистрация</h2>
+
+  @if (!isRegistered()) {
+    <input [(ngModel)]="username" placeholder="Ваше имя" />
+    <button (click)="register()">Создать аккаунт</button>
+  } @else {
+    @if (user()) {
+      <h3>Аккаунт создан</h3>
+      <p><strong>Имя:</strong> {{ user()?.username }}</p>
+      <p><strong>Public Key:</strong></p>
+      <div class="key-box">
+        <code>{{ user()?.id }}</code>
+        <button (click)="copyKey()">Копировать ключ</button>
+      </div>
+      @if (copied()) {
+        <p class="success">Ключ скопирован!</p>
+      }
+
+      <h4>Мнемоническая фраза (сохраните!):</h4>
+      <div class="key-box">
+        <code>{{ mnemonic() }}</code>
+      </div>
+
+      <button (click)="complete()">Перейти к чату</button>
+    }
+  }
+</div>

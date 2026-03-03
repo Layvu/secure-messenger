@@ -1,0 +1,37 @@
+@if (user()) {
+  <div class="header">
+    <h2>Децентрализованный чат</h2>
+    <div class="user-info">
+      <span>Вы: {{ user()?.username }}</span>
+      <div class="key-box">
+        <code>{{ user()?.id | slice: 0 : 32 }}...</code>
+        <button (click)="copyId()">Копировать ID</button>
+      </div>
+      @if (copied()) {
+        <p class="success">ID скопирован!</p>
+      }
+    </div>
+  </div>
+
+  <div class="contacts">
+    <input
+      [(ngModel)]="contactId"
+      (ngModelChange)="onContactChanged()"
+      placeholder="Public key собеседника"
+    />
+  </div>
+
+  <div class="messages">
+    @for (msg of messages(); track msg.id) {
+      <div [class]="msg.senderId === user()?.id ? 'my-message' : 'their-message'">
+        <b>{{ msg.senderId === user()?.id ? 'Я' : (msg.senderId | slice: 0 : 8) }}:</b>
+        {{ msg.text }}
+      </div>
+    }
+  </div>
+
+  <div class="input-area">
+    <input [(ngModel)]="newMessage" placeholder="Сообщение..." (keyup.enter)="send()" />
+    <button (click)="send()">Отправить</button>
+  </div>
+}

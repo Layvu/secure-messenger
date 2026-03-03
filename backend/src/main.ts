@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 
+// Deprecated: Этот файл больше не содержит логику сервера. Решено перйти на d-relay-node для лучшей производительности на небольших серверах
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);

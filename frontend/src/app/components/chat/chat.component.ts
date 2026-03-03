@@ -1,203 +1,64 @@
-import { Component, OnInit, OnDestroy, signal, DestroyRef, inject } from '@angular/core';
+import { Component, OnInit, signal, DestroyRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CryptoService } from '../../core/services/crypto.service';
+
 import { IdentityService, UserProfile } from '../../core/services/identity.service';
-import { RelayService, IncomingMessage } from '../../core/services/relay.service';
 import { StorageService } from '../../core/services/storage.service';
+import { CryptoService } from '../../core/services/crypto.service';
+import { KeyConversionService } from '../../core/services/key-conversion.service';
+import { EventService } from '../../core/services/event.service';
+import { RelayPoolService } from '../../core/services/relay-pool.service';
 
 @Component({
   selector: 'app-chat',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  template: `
-    @if (user()) {
-      <div class="header">
-        <h2>Чат</h2>
-        <div class="user-info">
-          <span>Вы: {{ user()?.username }}</span>
-          <div class="key-box">
-            <code>{{ user()?.id | slice: 0 : 32 }}...</code>
-            <button (click)="copyKey()">Копировать ключ</button>
-          </div>
-          @if (copied()) {
-            <p class="success">Ключ скопирован!</p>
-          }
-        </div>
-      </div>
-
-      <div class="contacts">
-        <input [(ngModel)]="contactId" placeholder="Вставьте Public Key контакта" />
-        <button (click)="addContact()">Добавить контакт</button>
-      </div>
-
-      <div class="messages">
-        @for (msg of messages(); track msg.id) {
-          <div [class]="msg.from === user()?.id ? 'my-message' : 'their-message'">
-            <b>{{ msg.from === user()?.id ? 'Я' : (msg.from | slice: 0 : 8) }}:</b>
-            {{ msg.text }}
-          </div>
-        }
-      </div>
-
-      <div class="input-area">
-        <input [(ngModel)]="newMessage" placeholder="Сообщение" (keyup.enter)="send()" />
-        <button (click)="send()">Отправить</button>
-      </div>
-    }
-  `,
-  styles: [
-    `
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .user-info {
-        text-align: right;
-      }
-      .key-box {
-        background: #f5f5f5;
-        padding: 5px;
-        margin: 5px 0;
-        display: flex;
-        gap: 5px;
-        align-items: center;
-      }
-      .key-box code {
-        font-size: 11px;
-        word-break: break-all;
-      }
-      .messages {
-        border: 1px solid #ddd;
-        padding: 20px;
-        margin: 20px 0;
-        min-height: 300px;
-        max-height: 400px;
-        overflow-y: auto;
-      }
-      .my-message {
-        text-align: right;
-        color: blue;
-      }
-      .their-message {
-        text-align: left;
-        color: green;
-      }
-      .input-area {
-        display: flex;
-        gap: 10px;
-      }
-      .input-area input {
-        flex: 1;
-        padding: 10px;
-      }
-      .success {
-        color: green;
-        font-size: 12px;
-      }
-      input {
-        padding: 10px;
-        margin: 5px 0;
-      }
-      button {
-        padding: 10px 20px;
-        cursor: pointer;
-      }
-    `,
-  ],
+  templateUrl: './chat.component.html',
+  styleUrls: ['./chat.component.scss'],
 })
-export class ChatComponent implements OnInit, OnDestroy {
+export class ChatComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
-
-  constructor(
-    private identity: IdentityService,
-    private relay: RelayService,
-    private storage: StorageService,
-    private crypto: CryptoService,
-  ) {}
+  private identity = inject(IdentityService);
+  private storage = inject(StorageService);
+  private crypto = inject(CryptoService);
+  private keyConversion = inject(KeyConversionService);
+  private eventService = inject(EventService);
+  private relayPool = inject(RelayPoolService);
 
   user = signal<UserProfile | null>(null);
   contactId = signal('');
   newMessage = signal('');
-  messages = signal<{ id?: string; from: string; text: string }[]>([]);
+  messages = signal<any[]>([]);
   copied = signal(false);
 
-  ngOnInit() {
-    // Подписка на текущего пользователя
-    this.identity.currentUser$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((user) => {
-      this.user.set(user);
-      if (user) {
-        this.initializeChat();
-        // Можно загрузить историю из БД
-        this.loadMessages();
-      }
-    });
-  }
-
-  private initializeChat() {
-    const user = this.user();
-    if (!user) return;
-
-    this.relay.connect();
-
-    // Подписка на входящие сообщения
-    this.relay.messages$
+  ngOnInit(): void {
+    this.identity.currentUser$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(async (incoming: IncomingMessage) => {
-        await this.handleIncomingMessage(incoming);
-      });
+      .subscribe((user) => this.user.set(user));
   }
 
-  private async handleIncomingMessage(incoming: IncomingMessage) {
-    const user = this.user();
-    if (!user) return;
-
-    console.log('Received raw message from', incoming.from);
-
-    try {
-      const senderPublicKeyEd = this.crypto.fromHex(incoming.from);
-      const senderPublicKeyX = this.crypto.convertEd25519PublicKeyToX25519(senderPublicKeyEd);
-      const myPrivateKeyEd = user.keyPair.privateKey;
-      const myPrivateKeyX = this.crypto.convertEd25519PrivateKeyToX25519(myPrivateKeyEd);
-
-      const { ciphertext, nonce } = JSON.parse(incoming.payload);
-      const plainText = this.crypto.decryptMessage(
-        ciphertext,
-        nonce,
-        senderPublicKeyX,
-        myPrivateKeyX,
-      );
-
-      console.log('Decrypted message:', plainText);
-
-      // Добавляем в локальный список
-      this.messages.update((msgs) => [
-        ...msgs,
-        { id: incoming.id, from: incoming.from, text: plainText },
-      ]);
-
-      // Сохраняем в БД
-      await this.storage.addMessage({
-        id: incoming.id,
-        senderId: incoming.from,
-        receiverId: user.id,
-        text: plainText,
-        timestamp: Date.now(),
-        status: 'received',
-      });
-    } catch (e) {
-      console.error('Decryption error:', e);
+  onContactChanged(): void {
+    const contact = this.contactId();
+    if (contact?.length > 30) {
+      this.loadMessages(contact);
     }
   }
 
-  private async loadMessages() {
-    // Загрузка истории из локальной БД
-    // const msgs = await this.storage.getMessages(...);
+  private loadMessages(contactPubKey: string): void {
+    const messages$ = this.storage.getMessages(contactPubKey);
+    if (!messages$) {
+      console.warn('Storage not ready');
+      return;
+    }
+
+    messages$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((messages) => {
+      const plainMessages = this.storage.decryptMessages(messages.map((m) => m.toJSON?.() ?? m));
+      this.messages.set(plainMessages);
+    });
   }
 
-  copyKey() {
+  copyId(): void {
     const user = this.user();
     if (user) {
       navigator.clipboard.writeText(user.id);
@@ -206,35 +67,48 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
   }
 
-  ngOnDestroy() {
-    this.relay.disconnect();
-  }
+  async send(): Promise<void> {
+    const text = this.newMessage();
+    const recipientId = this.contactId();
+    const currentUser = this.user();
 
-  async send() {
-    const user = this.user();
-    if (!this.contactId() || !this.newMessage() || !user) return;
+    if (!recipientId || !text || !currentUser) return;
 
-    console.log('Sending message to:', this.contactId().substring(0, 16) + '...');
+    try {
+      // Конвертация ключей для шифрования
+      const recipientEdPub = this.crypto.fromHex(recipientId);
+      const recipientXPub = this.keyConversion.ed25519PublicKeyToX25519(recipientEdPub);
+      const myXPriv = this.keyConversion.ed25519PrivateKeyToX25519(currentUser.keyPair.privateKey);
 
-    this.relay.sendMessage(this.contactId(), this.newMessage());
+      // Шифрование сообщения
+      const encrypted = this.crypto.encryptMessage(text, recipientXPub, myXPriv);
+      const content = JSON.stringify(encrypted);
 
-    this.messages.update((msgs) => [...msgs, { from: user.id, text: this.newMessage() }]);
+      // Создание подписанного события (капсулы)
+      const event = await this.eventService.createSignedEvent(
+        currentUser.keyPair.privateKey,
+        currentUser.id,
+        4, // kind 4 = зашифрованное прямое сообщение
+        [['p', recipientId]],
+        content,
+      );
 
-    await this.storage.addMessage({
-      id: 'temp_' + Date.now(),
-      senderId: user.id,
-      receiverId: this.contactId(),
-      text: this.newMessage(),
-      timestamp: Date.now(),
-      status: 'sent',
-    });
+      // Публикация в реле
+      this.relayPool.publish(event);
 
-    this.newMessage.set('');
-  }
+      // Сохранение в локальную БД (открытый текст, но БД зашифрует сама)
+      await this.storage.addMessage({
+        id: event.id,
+        senderId: currentUser.id,
+        receiverId: recipientId,
+        text: text,
+        timestamp: event.created_at * 1000,
+        status: 'sent',
+      });
 
-  addContact() {
-    if (this.contactId()) {
-      this.storage.addUser({ id: this.contactId(), username: 'Contact' });
+      this.newMessage.set('');
+    } catch (error) {
+      console.error('Ошибка при отправке сообщения:', error);
     }
   }
 }

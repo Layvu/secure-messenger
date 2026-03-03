@@ -159,7 +159,9 @@ export class StorageService {
   getMessages(contactId: string) {
     if (!this.db) return null;
     return this.db.collections['messages'].find({
-      selector: { $or: [{ senderId: contactId }, { receiverId: contactId }] },
+      selector: {
+        $or: [{ senderId: contactId }, { receiverId: contactId }],
+      },
       sort: [{ timestamp: 'asc' }],
     }).$;
   }
