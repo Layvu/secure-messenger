@@ -1,1 +1,47 @@
-/* You can add global styles to this file, and also import other style files */
+@import '@ionic/angular/css/core.css';
+@import '@ionic/angular/css/normalize.css';
+@import '@ionic/angular/css/structure.css';
+@import '@ionic/angular/css/typography.css';
+
+* {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+input,
+textarea,
+[contenteditable],
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+body {
+  overscroll-behavior-y: none;
+  overscroll-behavior-x: none;
+}
+
+:root {
+  --color-primary: #3880ff;
+  --color-success: #2dd36f;
+  --color-danger: #eb445a;
+  --color-medium: #92949c;
+  --color-background: #ffffff;
+  --color-text: #1a1a1a;
+  --font-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --ion-color-primary: var(--color-primary);
+  --ion-color-primary-contrast: #ffffff;
+  --ion-font-family: var(--font-base);
+  --ion-background-color: var(--color-background);
+  --ion-text-color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-base);
+  -webkit-font-smoothing: antialiased;
+}

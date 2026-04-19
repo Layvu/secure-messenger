@@ -9,27 +9,43 @@ export interface PowResult {
 
 @Injectable({ providedIn: 'root' })
 export class ProofOfWorkService {
-  private readonly PLACEHOLDER = '__POW_NONCE__';
-
   constructor(private crypto: CryptoService) {}
 
-  async mine(template: string, difficulty: number, yieldEvery = 10000): Promise<PowResult> {
+  async mine(baseHashHex: string, difficultyBits: number, yieldEvery = 1000): Promise<PowResult> {
+    const hexZeros = Math.floor(difficultyBits / 4);
+    const targetPrefix = '0'.repeat(hexZeros);
+
     let nonce = 0;
-    const targetPrefix = '0'.repeat(difficulty);
 
     while (true) {
-      const data = template.replace(this.PLACEHOLDER, nonce.toString());
-      const hash = this.crypto.hash(data, 32);
-      const hex = this.crypto.toHex(hash);
+      const idBytes = this.crypto.blake2b(baseHashHex + nonce, 32);
+      const idHex = this.crypto.toHex(idBytes);
 
-      if (hex.startsWith(targetPrefix)) {
-        return { nonce, idHex: hex, idBytes: hash };
+      if (idHex.startsWith(targetPrefix)) {
+        return { nonce, idHex, idBytes };
       }
 
       nonce++;
+
+      // Чтобы вкладка не висла
       if (nonce % yieldEvery === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise<void>((r) => setTimeout(r, 0));
       }
     }
+  }
+
+  verify(
+    baseHashHex: string,
+    nonce: number,
+    expectedIdHex: string,
+    difficultyBits: number,
+  ): boolean {
+    const hexZeros = Math.floor(difficultyBits / 4);
+    const targetPrefix = '0'.repeat(hexZeros);
+
+    if (!expectedIdHex.startsWith(targetPrefix)) return false;
+
+    const idBytes = this.crypto.blake2b(baseHashHex + nonce, 32);
+    return this.crypto.toHex(idBytes) === expectedIdHex;
   }
 }

@@ -128,3 +128,11 @@ yarn.lock.cached
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# ====================
+# SQLite Database and Temporary Files
+# ====================
+/d-relay-node/relay.sqlite
+/d-relay-node/relay.sqlite-shm
+/d-relay-node/relay.sqlite-wal
+/d-relay-node/sqlite3.exe

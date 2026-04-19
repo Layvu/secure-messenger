@@ -1,17 +1,18 @@
 {
   "name": "d-relay-node",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "description": "DM relay node",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "libsodium-wrappers": "^0.8.2",
-    "sqlite3": "^5.1.7",
-    "ws": "^8.19.0"
+    "better-sqlite3": "^12.9.0",
+    "libsodium-wrappers": "^0.8.3",
+    "ws": "^8.20.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

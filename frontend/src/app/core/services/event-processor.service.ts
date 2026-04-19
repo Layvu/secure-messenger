@@ -1,80 +1,78 @@
 import { Injectable } from '@angular/core';
-import { CryptoService } from './crypto.service';
-import { KeyConversionService } from './key-conversion.service';
-import { EventService } from './event.service';
+import { CryptoService, KeyPair } from './crypto.service';
+import { CapsuleService } from './capsule.service';
 import { StorageService } from './storage.service';
-import { SignedEvent } from '../models/event.model';
+import { SignedCapsule, CapsuleKind } from '../models/capsule.model';
 
 @Injectable({ providedIn: 'root' })
 export class EventProcessorService {
+  // TODO: инжектить
   constructor(
-    private crypto: CryptoService,
-    private keyConversion: KeyConversionService,
-    private eventService: EventService,
-    private storage: StorageService,
+    private readonly crypto: CryptoService,
+    private readonly capsule: CapsuleService,
+    private readonly storage: StorageService,
   ) {}
 
-  async processIncomingEvent(
-    event: SignedEvent,
-    myUserId: string,
-    myKeyPairEd: { publicKey: Uint8Array; privateKey: Uint8Array },
+  async processIncomingCapsule(
+    capsule: SignedCapsule,
+    myPubkeyHex: string,
+    myKeyPair: KeyPair,
   ): Promise<void> {
-    if (!this.eventService.verifyEvent(event)) {
-      console.warn('Event verification failed', event.id);
+    if (!this.capsule.verify(capsule)) {
+      console.warn('[EventProcessor] verification failed - capsule dropped:', capsule.id);
       return;
     }
 
-    if (event.kind === 4) {
-      await this.handleDirectMessage(event, myUserId, myKeyPairEd);
+    switch (capsule.kind) {
+      case CapsuleKind.DIRECT_MESSAGE:
+        await this.handleDirectMessage(capsule, myPubkeyHex, myKeyPair);
+        break;
+      default:
+        console.debug('[EventProcessor] unhandled kind:', capsule.kind, capsule.id);
     }
   }
 
   private async handleDirectMessage(
-    event: SignedEvent,
-    myUserId: string,
-    myKeyPairEd: { publicKey: Uint8Array; privateKey: Uint8Array },
+    capsule: SignedCapsule,
+    myPubkeyHex: string,
+    myKeyPair: KeyPair,
   ): Promise<void> {
-    const isForMe = event.tags.some((tag) => tag[0] === 'p' && tag[1] === myUserId);
-    const isFromMe = event.pubkey === myUserId;
-
+    const isForMe = capsule.tags.some((t) => t[0] === 'p' && t[1] === myPubkeyHex);
+    const isFromMe = capsule.pubkey === myPubkeyHex;
     if (!isForMe || isFromMe) return;
 
-    let decryptedText: string | null = null;
-
-    // Попытка расшифровать в формате { ciphertext, nonce }
+    let decrypted: string | null = null;
     try {
-      const parsed = JSON.parse(event.content);
-      if (parsed.ciphertext && parsed.nonce) {
-        const senderEdPub = this.crypto.fromHex(event.pubkey);
-        const senderXPub = this.keyConversion.ed25519PublicKeyToX25519(senderEdPub);
-        const myXPriv = this.keyConversion.ed25519PrivateKeyToX25519(myKeyPairEd.privateKey);
-
-        decryptedText = this.crypto.decryptMessage(
-          parsed.ciphertext,
-          parsed.nonce,
-          senderXPub,
-          myXPriv,
-        );
+      const parsed = JSON.parse(capsule.content) as { ciphertext?: string; nonce?: string };
+      if (!parsed.ciphertext || !parsed.nonce) {
+        console.warn('[EventProcessor] malformed content:', capsule.id);
+        return;
       }
-    } catch {
-      // Не JSON - возможно другой формат
-    }
-
-    if (!decryptedText) {
-      // Здесь можно добавить поддержку NIP-04
-      console.log('Could not decrypt message, unsupported format', event.id);
+      decrypted = this.crypto.decrypt(
+        parsed.ciphertext,
+        parsed.nonce,
+        this.crypto.fromHex(capsule.pubkey),
+        myKeyPair.privateKey,
+      );
+    } catch (e) {
+      console.warn('[EventProcessor] content parse error:', capsule.id, e);
       return;
     }
 
-    if (decryptedText) {
-      await this.storage.addMessage({
-        id: event.id,
-        senderId: event.pubkey,
-        receiverId: myUserId,
-        text: decryptedText,
-        timestamp: event.created_at * 1000,
-        status: 'received',
-      });
+    if (!decrypted) {
+      console.warn('[EventProcessor] decryption failed:', capsule.id);
+      return;
     }
+
+    await this.storage.addMessage({
+      id: capsule.id,
+      senderId: capsule.pubkey,
+      receiverId: myPubkeyHex,
+      text: decrypted,
+      timestamp: capsule.created_at * 1000,
+      status: 'received',
+      kind: capsule.kind,
+      capsuleTags: capsule.tags,
+    });
   }
 }

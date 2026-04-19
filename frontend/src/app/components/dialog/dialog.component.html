@@ -1,0 +1,67 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/chats"></ion-back-button>
+    </ion-buttons>
+    <ion-title>{{ contact()?.username ?? '...' }}</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="msg-content">
+  @if (messages().length === 0) {
+    <div class="empty-dialog">Напишите что-нибудь...</div>
+  }
+
+  <div class="message-list">
+    @for (msg of messages(); track msg.id) {
+      <div class="bubble-row" [class.mine]="isMine(msg)">
+        <div class="bubble" [class.bubble-mine]="isMine(msg)" [class.bubble-theirs]="!isMine(msg)">
+          <span class="selectable">{{ msg.text }}</span>
+          <span class="bubble-meta">
+            {{ formatTime(msg.timestamp) }}
+            @if (isMine(msg)) {
+              <span class="status">
+                @if (msg.status === 'sent') {
+                  ✓
+                }
+                @if (msg.status === 'received') {
+                  ✓✓
+                }
+                @if (msg.status === 'read') {
+                  <span class="read">✓✓</span>
+                }
+              </span>
+            }
+          </span>
+        </div>
+      </div>
+    }
+  </div>
+</ion-content>
+
+<ion-footer>
+  <ion-toolbar class="input-toolbar">
+    <ion-input
+      [ngModel]="newMessage()"
+      (ngModelChange)="newMessage.set($event)"
+      placeholder="Сообщение…"
+      (keyup.enter)="send()"
+      [disabled]="sending()"
+      fill="outline"
+      shape="round"
+    ></ion-input>
+
+    <ion-buttons slot="end">
+      <ion-button
+        (click)="send()"
+        [disabled]="!newMessage().trim() || sending()"
+        fill="solid"
+        shape="round"
+        color="primary"
+        class="send-btn"
+      >
+        <ion-icon slot="icon-only" name="send-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-footer>

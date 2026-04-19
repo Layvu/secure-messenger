@@ -1,0 +1,82 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Чаты</ion-title>
+    <ion-buttons slot="start">
+      <ion-button (click)="openKeyModal()" title="Мой ключ">
+        <ion-icon slot="icon-only" name="key-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-buttons slot="end">
+      <ion-button (click)="goToAddContact()">
+        <ion-icon slot="icon-only" name="add-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  @if (previews().length === 0) {
+    <div class="empty-state">
+      <p>Нет контактов</p>
+      <p class="empty-sub">Нажмите + чтобы добавить собеседника</p>
+    </div>
+  }
+
+  <ion-list lines="full">
+    @for (preview of previews(); track preview.contact.pubkey) {
+      <ion-item button detail (click)="openDialog(preview.contact.pubkey)">
+        <ion-avatar slot="start" class="chat-avatar">
+          {{ preview.contact.username.charAt(0).toUpperCase() }}
+        </ion-avatar>
+        <ion-label>
+          <h2>{{ preview.contact.username }}</h2>
+          <p>
+            @if (preview.lastMessage) {
+              {{ truncate(preview.lastMessage.text) }}
+            } @else {
+              <em>Нет сообщений</em>
+            }
+          </p>
+        </ion-label>
+        @if (preview.lastMessage) {
+          <ion-note slot="end" class="chat-time">
+            {{ formatTime(preview.lastMessage.timestamp) }}
+          </ion-note>
+        }
+      </ion-item>
+    }
+  </ion-list>
+</ion-content>
+
+<ion-modal
+  [isOpen]="keyModalOpen()"
+  (didDismiss)="closeKeyModal()"
+  [initialBreakpoint]="0.45"
+  [breakpoints]="[0, 0.45]"
+>
+  <ng-template>
+    <div class="key-modal-wrap">
+      <div class="key-modal-handle"></div>
+
+      <h3 class="key-modal-title">Мой публичный ключ</h3>
+      <p class="key-modal-sub">Поделитесь этим ключом с собеседником</p>
+
+      <div class="key-box">
+        <code class="selectable">{{ user()?.id }}</code>
+      </div>
+
+      <ion-button
+        expand="block"
+        (click)="copyKey()"
+        [color]="keyCopied() ? 'success' : 'primary'"
+        class="copy-btn"
+      >
+        <ion-icon
+          slot="start"
+          [name]="keyCopied() ? 'checkmark-outline' : 'copy-outline'"
+        ></ion-icon>
+        {{ keyCopied() ? 'Скопировано' : 'Скопировать ключ' }}
+      </ion-button>
+    </div>
+  </ng-template>
+</ion-modal>

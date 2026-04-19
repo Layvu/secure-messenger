@@ -4,7 +4,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/app",
-    "types": []
+    "types": [],
+    "rootDir": "./src"
   },
   "include": ["src/**/*.ts", "src/app/core/services/key-conversion.service.tss"],
   "exclude": ["src/**/*.spec.ts"]

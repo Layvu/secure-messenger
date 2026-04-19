@@ -1,0 +1,46 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/chats"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Новый контакт</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-item>
+    <ion-label position="stacked">Публичный ключ</ion-label>
+    <ion-textarea
+      [(ngModel)]="pubkey"
+      placeholder="Вставьте hex-ключ собеседника…"
+      rows="3"
+      autocomplete="off"
+      autocorrect="off"
+      spellcheck="false"
+      (ionInput)="error.set('')"
+    ></ion-textarea>
+  </ion-item>
+
+  <ion-item>
+    <ion-label position="stacked">Имя контакта</ion-label>
+    <ion-input
+      [(ngModel)]="username"
+      placeholder="Укажите имя собеседника"
+      maxlength="32"
+      (ionInput)="error.set('')"
+    ></ion-input>
+  </ion-item>
+
+  @if (error()) {
+    <ion-note color="danger" class="error-note">{{ error() }}</ion-note>
+  }
+
+  <ion-button
+    expand="block"
+    class="ion-margin-top"
+    (click)="save()"
+    [disabled]="saving() || !pubkey() || !username()"
+  >
+    {{ saving() ? 'Сохраняем…' : 'Добавить контакт' }}
+  </ion-button>
+</ion-content>

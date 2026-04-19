@@ -1,0 +1,139 @@
+<div class="onboarding-wrap">
+  @if (step() === 'choose') {
+    <div class="card">
+      <h2>Добро пожаловать в DM</h2>
+      <p class="subtitle">Без телефона. Без email. Только ключи.</p>
+
+      <label class="field-label">Ваше имя (отображается в чатах)</label>
+      <input class="input" [(ngModel)]="username" placeholder="Имя" maxlength="32" />
+
+      <button class="btn btn-primary" (click)="chooseCreate()" [disabled]="!username()">
+        Создать новый аккаунт
+      </button>
+      <button class="btn btn-outline" (click)="chooseRestore()">Восстановить по 12 словам</button>
+    </div>
+  }
+
+  @if (step() === 'show-mnemonic') {
+    <div class="card">
+      <h2>Запишите 12 слов</h2>
+      <p class="subtitle warning">
+        Это единственный способ восстановить аккаунт. Не показывайте никому.
+      </p>
+
+      <div class="mnemonic-grid">
+        @for (word of mnemonicWords(); track $index) {
+          <div class="mnemonic-word">
+            <span class="word-num">{{ $index + 1 }}</span>
+            <span class="selectable">{{ word }}</span>
+          </div>
+        }
+      </div>
+
+      <button class="btn btn-primary" (click)="proceedToVerify()">Я записал(а) - продолжить</button>
+    </div>
+  }
+
+  @if (step() === 'verify-mnemonic') {
+    <div class="card">
+      <h2>Проверка записи</h2>
+      <p class="subtitle">Введите слова под указанными номерами:</p>
+
+      @for (idx of verifyIndices(); track $index) {
+        <div class="verify-row">
+          <label class="field-label">Слово №{{ idx + 1 }}</label>
+          <input
+            class="input"
+            [value]="verifyAnswers()[$index]"
+            (input)="setVerifyAnswer($index, $any($event.target).value)"
+            placeholder="введите слово"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+        </div>
+      }
+
+      @if (verifyError()) {
+        <p class="error">Неверно. Попробуйте снова.</p>
+      }
+
+      <button class="btn btn-primary" (click)="submitVerification()">Подтвердить</button>
+    </div>
+  }
+
+  @if (step() === 'enter-mnemonic') {
+    <div class="card">
+      <h2>Необходима мнемоника</h2>
+      <p class="subtitle">Введите 12 слов через пробел, строчными буквами</p>
+
+      <textarea
+        class="input mnemonic-input selectable"
+        [(ngModel)]="restoreMnemonic"
+        placeholder="word1 word2 word3 ... word12"
+        rows="4"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+      ></textarea>
+
+      @if (restoreError()) {
+        <p class="error">{{ restoreError() }}</p>
+      }
+
+      <input
+        class="input"
+        [(ngModel)]="username"
+        placeholder="Ваше имя (необязательно)"
+        maxlength="32"
+      />
+
+      <button class="btn btn-primary" (click)="submitRestoreMnemonic()">Далее</button>
+    </div>
+  }
+
+  @if (step() === 'set-pin') {
+    <div class="card">
+      <h2>Установите PIN-код</h2>
+      <p class="subtitle">6 цифр. Используется для разблокировки приложения</p>
+
+      <label class="field-label">PIN</label>
+      <input
+        class="input pin-input"
+        type="password"
+        inputmode="numeric"
+        [(ngModel)]="pin1"
+        maxlength="6"
+        placeholder="••••••"
+        autocomplete="new-password"
+      />
+
+      <label class="field-label">Повторите PIN</label>
+      <input
+        class="input pin-input"
+        type="password"
+        inputmode="numeric"
+        [(ngModel)]="pin2"
+        maxlength="6"
+        placeholder="••••••"
+        autocomplete="new-password"
+      />
+
+      @if (pinError()) {
+        <p class="error">{{ pinError() }}</p>
+      }
+
+      <button class="btn btn-primary" (click)="submitPin()">Создать аккаунт</button>
+    </div>
+  }
+
+  @if (step() === 'loading') {
+    <div class="card loading-card">
+      <div class="spinner"></div>
+      <p>Создаём аккаунт…</p>
+      @if (loadingError()) {
+        <p class="error">{{ loadingError() }}</p>
+      }
+    </div>
+  }
+</div>
