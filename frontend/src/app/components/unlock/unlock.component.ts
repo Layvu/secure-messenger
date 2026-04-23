@@ -20,10 +20,10 @@ export class UnlockComponent {
   private readonly storage = inject(StorageService);
   private readonly relayPool = inject(RelayPoolService);
 
-  pin = signal('');
-  error = signal('');
-  loading = signal(false);
-  attempts = signal(0);
+  readonly pin = signal('');
+  readonly error = signal('');
+  readonly loading = signal(false);
+  readonly attempts = signal(0);
 
   async unlock(): Promise<void> {
     const pinValue = this.pin();

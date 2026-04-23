@@ -20,7 +20,11 @@ if (IS_DEV) {
   addRxPlugin(RxDBDevModePlugin);
 }
 
-// RxDB Schema
+export const DB_COLLECTIONS = {
+  MESSAGES: 'messages',
+  CONTACTS: 'contacts',
+  IDENTITY: 'identity',
+} as const;
 
 const messagesSchema = {
   version: 0,
@@ -103,8 +107,6 @@ export class WebStorageService extends StorageService {
     }
   }
 
-  // Messages
-
   async addMessage(msg: MessageDoc): Promise<void> {
     const { capsuleTags, ...rest } = msg;
     const toStore: Record<string, unknown> = { ...rest };
@@ -113,18 +115,18 @@ export class WebStorageService extends StorageService {
     if (capsuleTags !== undefined) {
       toStore['capsuleTags'] = JSON.stringify(capsuleTags);
     }
-    await this.col('messages').upsert(toStore);
+    await this.col(DB_COLLECTIONS.MESSAGES).upsert(toStore);
   }
 
   async hasMessage(id: string): Promise<boolean> {
     if (!this.db) return false;
-    const doc = await this.col('messages').findOne(id).exec();
+    const doc = await this.col(DB_COLLECTIONS.MESSAGES).findOne(id).exec();
     return doc !== null;
   }
 
   getMessages(contactPubkey: string): Observable<MessageDoc[]> | null {
     if (!this.db) return null;
-    return this.col('messages')
+    return this.col(DB_COLLECTIONS.MESSAGES)
       .find({
         selector: { $or: [{ senderId: contactPubkey }, { receiverId: contactPubkey }] },
         sort: [{ timestamp: 'asc' }],
@@ -134,7 +136,7 @@ export class WebStorageService extends StorageService {
 
   async getMessagesDirect(contactPubkey: string): Promise<MessageDoc[]> {
     if (!this.db) return [];
-    const docs = await this.col('messages')
+    const docs = await this.col(DB_COLLECTIONS.MESSAGES)
       .find({
         selector: { $or: [{ senderId: contactPubkey }, { receiverId: contactPubkey }] },
         sort: [{ timestamp: 'asc' }],
@@ -143,20 +145,18 @@ export class WebStorageService extends StorageService {
     return docs.map((d) => this.deserializeMessage(d.toJSON()));
   }
 
-  // Contacts
-
   async upsertContact(contact: ContactDoc): Promise<void> {
-    await this.col('contacts').upsert(contact);
+    await this.col(DB_COLLECTIONS.CONTACTS).upsert(contact);
   }
 
   async getContact(pubkey: string): Promise<ContactDoc | null> {
-    const doc = await this.col('contacts').findOne(pubkey).exec();
+    const doc = await this.col(DB_COLLECTIONS.CONTACTS).findOne(pubkey).exec();
     return doc ? (doc.toJSON() as ContactDoc) : null;
   }
 
   getContacts(): Observable<ContactDoc[]> | null {
     if (!this.db) return null;
-    return this.col('contacts')
+    return this.col(DB_COLLECTIONS.CONTACTS)
       .find()
       .$.pipe(map((docs) => docs.map((d) => d.toJSON() as ContactDoc)));
   }
@@ -165,7 +165,7 @@ export class WebStorageService extends StorageService {
     if (!this.db) return null;
 
     // TODO: тяжёлая логика
-    return this.col('contacts')
+    return this.col(DB_COLLECTIONS.CONTACTS)
       .find()
       .$.pipe(
         map((docs) => docs.map((d) => d.toJSON() as ContactDoc)),
@@ -174,7 +174,7 @@ export class WebStorageService extends StorageService {
 
           return combineLatest(
             contacts.map((contact) =>
-              this.col('messages')
+              this.col(DB_COLLECTIONS.MESSAGES)
                 .find({
                   selector: { $or: [{ senderId: contact.pubkey }, { receiverId: contact.pubkey }] },
                   sort: [{ timestamp: 'desc' }],
@@ -199,14 +199,12 @@ export class WebStorageService extends StorageService {
       );
   }
 
-  // Identity
-
   async upsertIdentity(identity: IdentityDoc): Promise<void> {
-    await this.col('identity').upsert({ ...identity, id: 'local' });
+    await this.col(DB_COLLECTIONS.IDENTITY).upsert({ ...identity, id: 'local' });
   }
 
   async getIdentity(): Promise<IdentityDoc | null> {
-    const doc = await this.col('identity').findOne('local').exec();
+    const doc = await this.col(DB_COLLECTIONS.IDENTITY).findOne('local').exec();
     return doc ? (doc.toJSON() as IdentityDoc) : null;
   }
 
@@ -235,9 +233,9 @@ export class WebStorageService extends StorageService {
       closeDuplicates: true,
     });
     await this.db.addCollections({
-      messages: { schema: messagesSchema },
-      contacts: { schema: contactsSchema },
-      identity: { schema: identitySchema },
+      [DB_COLLECTIONS.MESSAGES]: { schema: messagesSchema },
+      [DB_COLLECTIONS.CONTACTS]: { schema: contactsSchema },
+      [DB_COLLECTIONS.IDENTITY]: { schema: identitySchema },
     });
     console.log('[StorageService] DB ready:', dbName);
   }
@@ -283,28 +281,32 @@ export class WebStorageService extends StorageService {
   private async deleteIdbDatabases(rxdbName: string): Promise<void> {
     const prefix = `rxdb-dexie-${rxdbName}`;
     let names: string[];
+
     if (typeof indexedDB.databases === 'function') {
       const all = await indexedDB.databases();
       names = all.map((d) => d.name ?? '').filter((n) => n.startsWith(prefix));
     } else {
-      // TODO: выводить названия столбцов в одном месте из схемы и переиспользовать везде
-      names = ['', '--0--messages', '--0--contacts', '--0--identity', '--0--_rxdb_internal'].map(
-        (s) => `${prefix}${s}`,
-      );
+      names = [
+        '',
+        ...Object.values(DB_COLLECTIONS).map((c) => `--0--${c}`),
+        '--0--_rxdb_internal',
+      ].map((s) => `${prefix}${s}`);
     }
 
     await Promise.all(names.map((n) => this.deleteOneIdb(n)));
     await new Promise<void>((r) => setTimeout(r, 200));
   }
 
-  // TODO: перейти на свежий синтаксис angular
   private deleteOneIdb(name: string): Promise<void> {
     return new Promise<void>((resolve) => {
       const req = indexedDB.deleteDatabase(name);
 
       req.onsuccess = () => resolve();
       req.onerror = () => resolve();
-      req.onblocked = () => setTimeout(resolve, 600);
+      req.onblocked = () => {
+        console.warn(`[StorageService] IDB blocked: ${name}`);
+        setTimeout(resolve, 600);
+      };
     });
   }
 

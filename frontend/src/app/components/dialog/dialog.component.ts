@@ -1,12 +1,4 @@
-import {
-  Component,
-  OnInit,
-  AfterViewChecked,
-  signal,
-  DestroyRef,
-  inject,
-  ViewChild,
-} from '@angular/core';
+import { Component, signal, inject, viewChild, computed, effect, untracked } from '@angular/core';
 import {
   IonHeader,
   IonToolbar,
@@ -23,9 +15,10 @@ import { addIcons } from 'ionicons';
 import { sendOutline } from 'ionicons/icons';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { EMPTY } from 'rxjs';
 
-import { IdentityService, UserProfile } from '../../core/services/identity.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { StorageService, MessageDoc, ContactDoc } from '../../core/services/storage.service';
 import { CapsuleService } from '../../core/services/capsule.service';
 import { RelayPoolService } from '../../core/services/relay-pool.service';
@@ -50,53 +43,42 @@ import { CapsuleKind } from '../../core/models/capsule.model';
   templateUrl: './dialog.component.html',
   styleUrls: ['./dialog.component.scss'],
 })
-export class DialogComponent implements OnInit, AfterViewChecked {
-  @ViewChild(IonContent) private content!: IonContent;
+export class DialogComponent {
+  private readonly content = viewChild<IonContent>(IonContent);
 
-  private destroyRef = inject(DestroyRef);
-  private route = inject(ActivatedRoute);
-  private identity = inject(IdentityService);
-  private storage = inject(StorageService);
-  private capsuleSvc = inject(CapsuleService);
-  private relayPool = inject(RelayPoolService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly identity = inject(IdentityService);
+  private readonly storage = inject(StorageService);
+  private readonly capsuleSvc = inject(CapsuleService);
+  private readonly relayPool = inject(RelayPoolService);
 
-  me = signal<UserProfile | null>(null);
-  contact = signal<ContactDoc | null>(null);
-  messages = signal<MessageDoc[]>([]);
-  newMessage = signal('');
-  sending = signal(false);
+  readonly recipientPubkey = this.route.snapshot.paramMap.get('pubkey') ?? '';
 
-  private recipientPubkey = '';
-  private shouldScrollToBottom = false;
+  readonly me = toSignal(this.identity.currentUser$, { initialValue: null });
+  readonly messages = toSignal(this.storage.getMessages(this.recipientPubkey) ?? EMPTY, {
+    initialValue: [] as MessageDoc[],
+  });
+
+  private readonly contactsList = toSignal(this.storage.getContacts() ?? EMPTY, {
+    initialValue: [] as ContactDoc[],
+  });
+
+  readonly contact = computed(
+    () => this.contactsList().find((c) => c.pubkey === this.recipientPubkey) ?? null,
+  );
+
+  readonly newMessage = signal('');
+  readonly sending = signal(false);
 
   constructor() {
     addIcons({ sendOutline });
-  }
 
-  ngOnInit(): void {
-    this.recipientPubkey = this.route.snapshot.paramMap.get('pubkey') ?? '';
-
-    // TODO: перейти на async и свежий синтаксис без кучи подписок
-    this.identity.currentUser$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((u) => this.me.set(u));
-
-    this.storage.getContact(this.recipientPubkey).then((c) => this.contact.set(c));
-
-    const stream = this.storage.getMessages(this.recipientPubkey);
-    if (stream) {
-      stream.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((msgs) => {
-        this.messages.set(msgs);
-        this.shouldScrollToBottom = true;
+    effect(() => {
+      this.messages();
+      untracked(() => {
+        setTimeout(() => this.content()?.scrollToBottom(0), 50);
       });
-    }
-  }
-
-  ngAfterViewChecked(): void {
-    if (this.shouldScrollToBottom) {
-      this.content?.scrollToBottom(0);
-      this.shouldScrollToBottom = false;
-    }
+    });
   }
 
   async send(): Promise<void> {

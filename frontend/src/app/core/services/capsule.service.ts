@@ -1,5 +1,4 @@
-import { Injectable } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { Injectable, inject } from '@angular/core';
 import { CryptoService } from './crypto.service';
 import { ProofOfWorkService } from './proof-of-work.service';
 import { StorageService } from './storage.service';
@@ -10,12 +9,10 @@ import { SignedCapsule, BuildCapsuleParams, CapsuleKind } from '../models/capsul
 export class CapsuleService {
   static readonly POW_DIFFICULTY_BITS = 16; // 4 hex нуля
 
-  constructor(
-    private crypto: CryptoService,
-    private pow: ProofOfWorkService,
-    private storage: StorageService,
-    private identity: IdentityService,
-  ) {}
+  private readonly crypto = inject(CryptoService);
+  private readonly pow = inject(ProofOfWorkService);
+  private readonly storage = inject(StorageService);
+  private readonly identity = inject(IdentityService);
 
   private serializeForBaseHash(
     pubkey: string,
@@ -72,7 +69,6 @@ export class CapsuleService {
   verify(capsule: SignedCapsule): boolean {
     try {
       const sortedTags = this.sortTags(capsule.tags);
-
       const serializedBase = this.serializeForBaseHash(
         capsule.pubkey,
         capsule.created_at,
@@ -109,7 +105,6 @@ export class CapsuleService {
     try {
       const msgs = await this.storage.getMessagesDirect(contactPubkeyHex);
       if (msgs.length === 0) return [];
-
       const recentIds = msgs.slice(-2).map((m) => m.id);
       return [['e', ...recentIds]];
     } catch (e) {

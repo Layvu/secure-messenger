@@ -1,3 +1,25 @@
+.scanner-section {
+  margin-bottom: 8px;
+}
+
+.scanner-container {
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.scanner-video {
+  width: 100%;
+  display: block;
+  max-height: 300px;
+  object-fit: cover;
+}
+
+.scanner-canvas {
+  display: none;
+}
+
 .error-note {
   display: block;
   padding: 8px 16px;

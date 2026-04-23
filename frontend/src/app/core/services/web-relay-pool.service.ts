@@ -1,4 +1,4 @@
-import { Injectable, inject, NgZone } from '@angular/core';
+import { Injectable, inject, NgZone, DestroyRef } from '@angular/core';
 import { IdentityService } from './identity.service';
 import { EventProcessorService } from './event-processor.service';
 import { RelayPoolService } from './relay-pool.service';
@@ -16,6 +16,7 @@ export class WebRelayPoolService extends RelayPoolService {
   private readonly eventProcessor = inject(EventProcessorService);
   private readonly storage = inject(StorageService);
   private readonly zone = inject(NgZone);
+  private readonly destroyRef = inject(DestroyRef);
 
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -33,6 +34,8 @@ export class WebRelayPoolService extends RelayPoolService {
   constructor() {
     super();
     this.connect();
+
+    this.destroyRef.onDestroy(() => this.disconnect());
   }
 
   connect(): void {
@@ -42,12 +45,11 @@ export class WebRelayPoolService extends RelayPoolService {
     console.log(
       `[RelayPool] connecting to ${this.RELAY_URL} (attempt ${this.reconnectAttempt + 1})`,
     );
+
     this.ws = this.zone.runOutsideAngular(() => new WebSocket(this.RELAY_URL));
     this.ws.onopen = () => this.zone.run(() => this.onOpen());
     this.ws.onmessage = (msg) => this.onMessage(msg);
-    this.ws.onerror = () => {
-      /* TODO */
-    };
+    this.ws.onerror = () => {};
     this.ws.onclose = () => this.zone.run(() => this.onClose());
   }
 
@@ -156,9 +158,6 @@ export class WebRelayPoolService extends RelayPoolService {
         }
         break;
       }
-
-      default:
-        break;
     }
   }
 

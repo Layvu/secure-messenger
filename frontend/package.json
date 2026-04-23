@@ -38,6 +38,7 @@
     "dexie": "^4.3.0",
     "hash-wasm": "^4.12.0",
     "ionicons": "^8.0.13",
+    "jsqr": "^1.4.0",
     "libsodium-wrappers": "^0.8.2",
     "qrcode": "^1.5.4",
     "rxdb": "^16.21.1",

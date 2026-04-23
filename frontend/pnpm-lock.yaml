@@ -53,6 +53,9 @@ importers:
       ionicons:
         specifier: ^8.0.13
         version: 8.0.13
+      jsqr:
+        specifier: ^1.4.0
+        version: 1.4.0
       libsodium-wrappers:
         specifier: ^0.8.2
         version: 0.8.2
@@ -2749,6 +2752,9 @@ packages:
 
   jsonschema-key-compression@1.7.0:
     resolution: {integrity: sha512-l3RxhqT+IIp7He/BQ6Ao9PvK2rOa0sJse1ZoaJIKpiY1RC9Sy4GRhweDtxRGnQe8kuPOedTIE5Dq36fSYCFwnA==}
+
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   karma-chrome-launcher@3.2.0:
     resolution: {integrity: sha512-rE9RkUPI7I9mAxByQWkGJFXfFD6lE4gC5nPuZdobf/QdTEJI6EU4yIay/cfU/xV4ZxlM5JiTv7zWYgA64NpS5Q==}
@@ -6519,6 +6525,8 @@ snapshots:
   jsonpointer@5.0.1: {}
 
   jsonschema-key-compression@1.7.0: {}
+
+  jsqr@1.4.0: {}
 
   karma-chrome-launcher@3.2.0:
     dependencies:

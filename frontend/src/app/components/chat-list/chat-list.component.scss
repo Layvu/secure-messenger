@@ -8,10 +8,6 @@
   gap: 8px;
   text-align: center;
 }
-
-.empty-icon {
-  font-size: 56px;
-}
 .empty-sub {
   font-size: 13px;
   margin: 0;
@@ -41,7 +37,7 @@
   padding: 16px 20px 32px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .key-modal-handle {
@@ -49,37 +45,37 @@
   height: 4px;
   background: #e0e0e0;
   border-radius: 2px;
-  margin: 0 auto 8px;
+  margin: 0 auto 4px;
 }
 
 .key-modal-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--color-text);
+  text-align: center;
 }
 
-.key-modal-sub {
-  margin: 0;
+.qr-container {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.qr-image {
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.qr-hint {
+  text-align: center;
   font-size: 13px;
   color: var(--color-medium);
-  line-height: 1.4;
+  margin: 0;
 }
 
-.key-box {
-  background: #f5f7ff;
-  border-radius: 12px;
-  padding: 14px;
-  word-break: break-all;
-
-  code {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-    color: var(--color-text);
-    line-height: 1.6;
-  }
-}
-
-.copy-btn {
+.modal-btn {
   margin-top: 4px;
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { CryptoService } from './crypto.service';
 
 export interface PowResult {
@@ -9,12 +9,11 @@ export interface PowResult {
 
 @Injectable({ providedIn: 'root' })
 export class ProofOfWorkService {
-  constructor(private crypto: CryptoService) {}
+  private readonly crypto = inject(CryptoService);
 
   async mine(baseHashHex: string, difficultyBits: number, yieldEvery = 1000): Promise<PowResult> {
     const hexZeros = Math.floor(difficultyBits / 4);
     const targetPrefix = '0'.repeat(hexZeros);
-
     let nonce = 0;
 
     while (true) {

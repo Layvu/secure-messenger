@@ -8,10 +8,10 @@ export const CapsuleKind = {
   RELAY_HEARTBEAT: 101,
 } as const;
 
-// TODO: проверить использование везде типов, констант и общих энамов
 export type CapsuleKindValue = (typeof CapsuleKind)[keyof typeof CapsuleKind];
 
-export const RELAY_SYSTEM_KINDS = new Set<number>([
+// TODO: проверить использование везде типов, констант и общих энамов
+export const RELAY_SYSTEM_KINDS = new Set<CapsuleKindValue>([
   CapsuleKind.RELAY_HEARTBEAT,
   CapsuleKind.PEER_DISCOVERY,
 ]);
@@ -20,7 +20,7 @@ export interface SignedCapsule {
   id: string;
   pubkey: string;
   created_at: number;
-  kind: number;
+  kind: CapsuleKindValue;
   tags: string[][];
   pow_nonce: number;
   content: string;
@@ -28,7 +28,7 @@ export interface SignedCapsule {
 }
 
 export interface BuildCapsuleParams {
-  kind: number;
+  kind: CapsuleKindValue;
   plaintextContent: string;
   extraTags?: string[][];
   recipientPubkeyHex?: string;

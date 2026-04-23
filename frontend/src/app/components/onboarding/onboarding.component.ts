@@ -29,31 +29,29 @@ export class OnboardingComponent {
   private readonly storage = inject(StorageService);
   private readonly relayPool = inject(RelayPoolService);
 
-  step = signal<OnboardingStep>('choose');
+  readonly step = signal<OnboardingStep>('choose');
 
-  username = signal('');
-  generatedMnemonic = signal('');
-  mnemonicWords = computed(() => this.generatedMnemonic().split(' '));
+  readonly username = signal('');
+  readonly generatedMnemonic = signal('');
+  readonly mnemonicWords = computed(() => this.generatedMnemonic().split(' '));
 
-  verifyIndices = signal<number[]>([]);
-  verifyAnswers = signal<string[]>(['', '', '']);
-  verifyError = signal(false);
+  readonly verifyIndices = signal<number[]>([]);
+  readonly verifyAnswers = signal<string[]>(['', '', '']);
+  readonly verifyError = signal(false);
 
-  restoreMnemonic = signal('');
-  restoreError = signal('');
+  readonly restoreMnemonic = signal('');
+  readonly restoreError = signal('');
 
-  pin1 = signal('');
-  pin2 = signal('');
-  pinError = signal('');
-  loadingError = signal('');
-
-  // Step 1
+  readonly pin1 = signal('');
+  readonly pin2 = signal('');
+  readonly pinError = signal('');
+  readonly loadingError = signal('');
 
   async chooseCreate(): Promise<void> {
     if (!this.username().trim()) return;
     const { mnemonic } = await this.identity.createNewAccount(this.username().trim());
 
-    console.log('Мнемоническая фраза (12 слов):', mnemonic); // TODO: для тестирования
+    console.log('Мнемоническая фраза (12 слов):', mnemonic);
 
     this.generatedMnemonic.set(mnemonic);
     this.verifyIndices.set(this.pickRandomIndices(12, 3));
@@ -67,14 +65,10 @@ export class OnboardingComponent {
     this.step.set('enter-mnemonic');
   }
 
-  // Step 2
-
   proceedToVerify(): void {
     this.verifyError.set(false);
     this.step.set('verify-mnemonic');
   }
-
-  // Step 3
 
   submitVerification(): void {
     const words = this.mnemonicWords();
@@ -97,8 +91,6 @@ export class OnboardingComponent {
     this.verifyError.set(false);
   }
 
-  // Step 2.2
-
   submitRestoreMnemonic(): void {
     const words = this.restoreMnemonic().trim().split(/\s+/);
     if (words.length !== 12) {
@@ -112,8 +104,6 @@ export class OnboardingComponent {
     this.restoreError.set('');
     this.step.set('set-pin');
   }
-
-  // Step 4
 
   async submitPin(): Promise<void> {
     const p1 = this.pin1();

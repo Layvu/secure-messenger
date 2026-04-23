@@ -3,31 +3,46 @@
     <ion-buttons slot="start">
       <ion-back-button defaultHref="/chats"></ion-back-button>
     </ion-buttons>
-    <ion-title>Новый контакт</ion-title>
+    <ion-title>Добавить контакт</ion-title>
   </ion-toolbar>
 </ion-header>
 
 <ion-content class="ion-padding">
-  <ion-item>
-    <ion-label position="stacked">Публичный ключ</ion-label>
-    <ion-textarea
-      [(ngModel)]="pubkey"
-      placeholder="Вставьте hex-ключ собеседника…"
-      rows="3"
+  <div class="scanner-section">
+    <ion-button fill="outline" expand="block" (click)="toggleScanner()">
+      {{ scanning() ? 'Остановить сканер' : 'Сканировать QR-код' }}
+    </ion-button>
+
+    @if (scanError()) {
+      <ion-note color="danger" class="ion-padding-top">{{ scanError() }}</ion-note>
+    }
+
+    @if (scanning()) {
+      <div class="scanner-container">
+        <video #videoEl autoplay playsinline class="scanner-video"></video>
+        <canvas #canvasEl class="scanner-canvas"></canvas>
+      </div>
+    }
+  </div>
+
+  <ion-item class="ion-margin-top">
+    <ion-label position="stacked">Публичный ключ (hex)</ion-label>
+    <ion-input
+      [value]="pubkey()"
+      (ionInput)="pubkey.set($event.detail.value ?? '')"
+      placeholder="Введите ключ или отсканируйте QR"
       autocomplete="off"
       autocorrect="off"
       spellcheck="false"
-      (ionInput)="error.set('')"
-    ></ion-textarea>
+    ></ion-input>
   </ion-item>
 
   <ion-item>
     <ion-label position="stacked">Имя контакта</ion-label>
     <ion-input
-      [(ngModel)]="username"
-      placeholder="Укажите имя собеседника"
-      maxlength="32"
-      (ionInput)="error.set('')"
+      [value]="username()"
+      (ionInput)="username.set($event.detail.value ?? '')"
+      placeholder="Имя"
     ></ion-input>
   </ion-item>
 
@@ -35,12 +50,12 @@
     <ion-note color="danger" class="error-note">{{ error() }}</ion-note>
   }
 
-  <ion-button
-    expand="block"
-    class="ion-margin-top"
-    (click)="save()"
-    [disabled]="saving() || !pubkey() || !username()"
-  >
-    {{ saving() ? 'Сохраняем…' : 'Добавить контакт' }}
-  </ion-button>
+  <div class="ion-padding-top">
+    <ion-button expand="block" (click)="save()" [disabled]="saving()">
+      @if (saving()) {
+        <ion-spinner slot="start" name="crescent"></ion-spinner>
+      }
+      Добавить
+    </ion-button>
+  </div>
 </ion-content>

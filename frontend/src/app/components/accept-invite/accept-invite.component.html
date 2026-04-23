@@ -1,0 +1,29 @@
+<ion-content class="ion-padding accept-invite">
+  @switch (state()) {
+    @case ('loading') {
+      <div class="center">
+        <ion-spinner name="crescent"></ion-spinner>
+        <p>Добавляем контакт…</p>
+      </div>
+    }
+    @case ('success') {
+      <div class="center">
+        <ion-icon name="checkmark-circle-outline" class="icon-success"></ion-icon>
+        <p>{{ contactName() }} добавлен!</p>
+      </div>
+    }
+    @case ('already') {
+      <div class="center">
+        <ion-icon name="checkmark-circle-outline" class="icon-success"></ion-icon>
+        <p>{{ contactName() }} уже в контактах</p>
+      </div>
+    }
+    @case ('error') {
+      <div class="center">
+        <ion-icon name="close-circle-outline" class="icon-error"></ion-icon>
+        <p>{{ errorMsg() }}</p>
+        <ion-button fill="outline" (click)="goBack()">Назад</ion-button>
+      </div>
+    }
+  }
+</ion-content>

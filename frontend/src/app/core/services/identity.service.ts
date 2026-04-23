@@ -1,5 +1,5 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { Injectable, signal, inject } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { CryptoService, KeyPair } from './crypto.service';
 import { LocalStorageService } from './local-storage.service';
 import { PinService } from './pin.service';
@@ -18,14 +18,12 @@ const LS_LAST_ONLINE_TS = 'dm_last_online_ts'; // Unix-timestamp последн�
 
 @Injectable({ providedIn: 'root' })
 export class IdentityService {
-  private currentUserSubject = new BehaviorSubject<UserProfile | null>(null);
-  readonly currentUser$ = this.currentUserSubject.asObservable();
+  private readonly crypto = inject(CryptoService);
+  private readonly ls = inject(LocalStorageService);
+  private readonly pin = inject(PinService);
 
-  constructor(
-    private crypto: CryptoService,
-    private ls: LocalStorageService,
-    private pin: PinService,
-  ) {}
+  private readonly currentUserSignal = signal<UserProfile | null>(null);
+  readonly currentUser$ = toObservable(this.currentUserSignal);
 
   hasStoredAccount(): boolean {
     return this.ls.has(LS_USER_ID) && this.ls.has(LS_ENC_MNEMONIC_CT);
@@ -61,7 +59,7 @@ export class IdentityService {
     this.ls.set(LS_ENC_MNEMONIC_N, nonce);
     this.ls.set(LS_LAST_ONLINE_TS, '0');
 
-    this.currentUserSubject.next({ id: userId, username, keyPair });
+    this.currentUserSignal.set({ id: userId, username, keyPair });
     return { encKey: encKeyHex, userId };
   }
 
@@ -81,7 +79,7 @@ export class IdentityService {
     const keyPair = await this.crypto.keysFromMnemonic(mnemonic);
 
     // TODO: state? В папку data-access?
-    this.currentUserSubject.next({ id: userId, username: '', keyPair });
+    this.currentUserSignal.set({ id: userId, username: '', keyPair });
     return { encKey: this.pin.keyToHex(derived), userId };
   }
 
@@ -91,16 +89,16 @@ export class IdentityService {
   }
 
   setUsername(username: string): void {
-    const current = this.currentUserSubject.value;
-    if (current) this.currentUserSubject.next({ ...current, username });
+    const current = this.currentUserSignal();
+    if (current) this.currentUserSignal.set({ ...current, username });
   }
 
   logout(): void {
-    this.currentUserSubject.next(null);
+    this.currentUserSignal.set(null);
   }
 
   getUser(): UserProfile | null {
-    return this.currentUserSubject.value;
+    return this.currentUserSignal();
   }
 
   getLastOnlineTimestamp(): number {

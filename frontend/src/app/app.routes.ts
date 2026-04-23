@@ -13,6 +13,14 @@ export const routes: Routes = [
       import('./components/unlock/unlock.component').then((m) => m.UnlockComponent),
   },
   {
+    path: 'add',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./components/accept-invite/accept-invite.component').then(
+        (m) => m.AcceptInviteComponent,
+      ),
+  },
+  {
     path: 'chats',
     canActivate: [authGuard],
     loadComponent: () =>

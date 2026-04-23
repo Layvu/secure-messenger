@@ -4,13 +4,14 @@ import {
   Router,
   ActivatedRouteSnapshot,
   RouterStateSnapshot,
+  UrlTree,
 } from '@angular/router';
 import { IdentityService } from '../services/identity.service';
 
 export const authGuard: CanActivateFn = (
   _route: ActivatedRouteSnapshot,
   state: RouterStateSnapshot,
-) => {
+): boolean | UrlTree => {
   const identity = inject(IdentityService);
   const router = inject(Router);
 

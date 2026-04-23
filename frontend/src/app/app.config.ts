@@ -18,7 +18,7 @@ import { LocalStorageService } from './core/services/local-storage.service';
 import { WebCryptoService } from './core/services/web-crypto.service';
 import { WebStorageService } from './core/services/web-storage.service';
 import { WebRelayPoolService } from './core/services/web-relay-pool.service';
-import { StubCameraService } from './core/services/camera.service';
+import { WebCameraService } from './core/services/web-camera.service';
 import { WebClipboardService } from './core/services/clipboard.service';
 import { WebPinService } from './core/services/web-pin.service';
 import { WebLocalStorageService } from './core/services/local-storage.service';
@@ -33,7 +33,7 @@ export const appConfig: ApplicationConfig = {
     { provide: CryptoService, useClass: WebCryptoService },
     { provide: StorageService, useClass: WebStorageService },
     { provide: RelayPoolService, useClass: WebRelayPoolService },
-    { provide: CameraService, useClass: StubCameraService },
+    { provide: CameraService, useClass: WebCameraService },
     { provide: ClipboardService, useClass: WebClipboardService },
     { provide: PinService, useClass: WebPinService },
     { provide: LocalStorageService, useClass: WebLocalStorageService },
