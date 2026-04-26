@@ -1,7 +1,18 @@
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { IdentityService } from './core/services/identity.service';
 
 export const routes: Routes = [
+  // TODO: inject в routes ?
+  {
+    path: '',
+    pathMatch: 'full',
+    redirectTo: () => {
+      const identity = inject(IdentityService);
+      return identity.hasStoredAccount() ? '/unlock' : '/onboarding';
+    },
+  },
   {
     path: 'onboarding',
     loadComponent: () =>
@@ -38,6 +49,5 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./components/dialog/dialog.component').then((m) => m.DialogComponent),
   },
-  { path: '', redirectTo: 'onboarding', pathMatch: 'full' },
-  { path: '**', redirectTo: 'onboarding' },
+  { path: '**', redirectTo: '' },
 ];

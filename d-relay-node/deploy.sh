@@ -66,6 +66,7 @@ Environment=PORT=8081
 Environment=TTL_DAYS=14
 Environment=POW_DIFFICULTY=16
 Environment=RELAY_PUBLIC_IP=185.41.162.49
+Environment=PEER_RELAYS=
 MemoryMax=256M
 MemoryAccounting=yes
 

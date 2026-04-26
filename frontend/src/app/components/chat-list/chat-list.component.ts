@@ -1,4 +1,4 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, signal, inject, Signal } from '@angular/core';
 import {
   IonHeader,
   IonToolbar,
@@ -30,6 +30,8 @@ import { IdentityService, UserProfile } from '../../core/services/identity.servi
 import { StorageService, ChatPreview } from '../../core/services/storage.service';
 import { ClipboardService } from '../../core/services/clipboard.service';
 import { ContactService } from '../../core/services/contact.service';
+import { RelayPoolService } from '../../core/services/relay-pool.service';
+import { RelayInfo } from '../../core/models/relay.model';
 
 type ShareState = 'idle' | 'copied' | 'shared' | 'error';
 
@@ -60,6 +62,7 @@ export class ChatListComponent {
   private readonly router = inject(Router);
   private readonly clipboard = inject(ClipboardService);
   private readonly contactSvc = inject(ContactService);
+  private readonly relayPool = inject(RelayPoolService);
 
   readonly user = toSignal(this.identity.currentUser$, { initialValue: null });
   readonly previews = toSignal(this.storage.getChatPreviews() ?? EMPTY, {
@@ -69,6 +72,8 @@ export class ChatListComponent {
   readonly keyModalOpen = signal(false);
   readonly qrDataUrl = signal<string | null>(null);
   readonly shareState = signal<ShareState>('idle');
+
+  readonly relays: Signal<RelayInfo[]> = this.relayPool.relays;
 
   constructor() {
     addIcons({ addOutline, keyOutline, copyOutline, checkmarkOutline, shareOutline });

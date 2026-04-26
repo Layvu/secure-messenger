@@ -84,6 +84,23 @@
         <ion-icon slot="start" name="copy-outline"></ion-icon>
         Скопировать публичный ключ
       </ion-button>
+
+      <div class="relay-section">
+        <p class="relay-title">Реле</p>
+        @for (relay of relays(); track relay.url) {
+          <div class="relay-row" [class.relay-active]="relay.isActive">
+            <span class="relay-dot" [class]="relay.status"></span>
+            <span class="relay-url">{{ relay.url }}</span>
+            <span class="relay-latency">
+              @if (relay.latency !== null) {
+                {{ relay.latency }}ms
+              } @else {
+                —
+              }
+            </span>
+          </div>
+        }
+      </div>
     </div>
   </ng-template>
 </ion-modal>

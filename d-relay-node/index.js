@@ -11,6 +11,11 @@ const POW_DIFFICULTY = process.env.POW_DIFFICULTY || 16; // бит
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 час
 const HEARTBEAT_INTERVAL_MS = 60 * 1000; // 60 сек
 const RELAY_PUBLIC_IP = process.env.RELAY_PUBLIC_IP || "127.0.0.1";
+const PEER_RELAYS = process.env.PEER_RELAYS
+  ? process.env.PEER_RELAYS.split(",")
+      .map((r) => r.trim())
+      .filter(Boolean)
+  : [];
 
 // SQLite
 const db = new Database("./relay.sqlite");
@@ -277,6 +282,12 @@ function handleReq(subId, filters, ws) {
     }
   }
 
+  if (subId === "give_me_peers") {
+    sendPeerList(ws);
+    safeSend(ws, ["EOSE", subId]);
+    return;
+  }
+
   // DAG
   if (filters?.id) {
     const row = stmtQueryById.get(filters.id);
@@ -364,6 +375,26 @@ function broadcastHeartbeat(wss) {
   if (count > 0) console.log(`[♥] heartbeat - ${count} client(s)`);
 }
 
+function sendPeerList(ws) {
+  if (!relayKeypair || PEER_RELAYS.length === 0) return;
+
+  const content = JSON.stringify(PEER_RELAYS);
+  const msgBytes = sodium.from_string(content);
+  const pex = {
+    id: sodium.to_hex(sodium.crypto_generichash(32, msgBytes)),
+    pubkey: sodium.to_hex(relayKeypair.publicKey),
+    kind: 100,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [],
+    pow_nonce: 0,
+    content,
+    sig: sodium.to_hex(
+      sodium.crypto_sign_detached(msgBytes, relayKeypair.privateKey),
+    ),
+  };
+  safeSend(ws, ["EVENT", "pex", pex]);
+}
+
 // Точка входа
 
 async function start() {
@@ -381,6 +412,8 @@ async function start() {
   wss.on("connection", (ws, req) => {
     const ip = req.socket.remoteAddress;
     console.log(`[+] client connected from ${ip}`);
+
+    sendPeerList(ws);
 
     ws.on("message", (raw) => {
       let data;
