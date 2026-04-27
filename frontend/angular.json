@@ -18,13 +18,24 @@
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
-            "polyfills": ["zone.js"],
+            "polyfills": ["zone.js", "src/polyfills.ts"],
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "assets": [
               {
                 "glob": "**/*",
-                "input": "public"
+                "input": "src/icons",
+                "output": "icons"
+              },
+              {
+                "glob": "manifest.webmanifest",
+                "input": "src",
+                "output": ""
+              },
+              {
+                "glob": "dm-sw.js",
+                "input": "src",
+                "output": ""
               }
             ],
             "styles": ["src/styles.scss"]

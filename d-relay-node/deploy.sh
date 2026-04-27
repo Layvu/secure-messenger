@@ -23,6 +23,7 @@ rsync -az --delete \
   --exclude='*.sqlite-wal' \
   --exclude='sqlite3.exe' \
   --exclude='.git' \
+  --exclude='vapid.json' \
   "$(dirname "$0")/" \
   "${VM_USER}@${VM_HOST}:${APP_DIR}/"
 

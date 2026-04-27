@@ -1,15 +1,18 @@
 "use strict";
 
+const http = require("http");
 const WebSocket = require("ws");
 const Database = require("better-sqlite3");
 const sodium = require("libsodium-wrappers");
+const webpush = require("web-push");
+const fs = require("fs");
+const path = require("path");
 
 // Конфигурация
-const PORT = process.env.PORT || 8081;
-const TTL_DAYS = process.env.TTL_DAYS || 14;
-const POW_DIFFICULTY = process.env.POW_DIFFICULTY || 16; // бит
-const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 час
-const HEARTBEAT_INTERVAL_MS = 60 * 1000; // 60 сек
+
+const PORT = parseInt(process.env.PORT || "8081", 10);
+const TTL_DAYS = parseInt(process.env.TTL_DAYS || "14", 10);
+const POW_DIFFICULTY = parseInt(process.env.POW_DIFFICULTY || "16", 10);
 const RELAY_PUBLIC_IP = process.env.RELAY_PUBLIC_IP || "127.0.0.1";
 const PEER_RELAYS = process.env.PEER_RELAYS
   ? process.env.PEER_RELAYS.split(",")
@@ -17,7 +20,55 @@ const PEER_RELAYS = process.env.PEER_RELAYS
       .filter(Boolean)
   : [];
 
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+
+// VAPID
+
+function loadVapidKeys() {
+  const vapidFile = path.join(__dirname, "vapid.json");
+  try {
+    if (fs.existsSync(vapidFile)) {
+      const raw = fs.readFileSync(vapidFile, "utf-8");
+      const { publicKey, privateKey } = JSON.parse(raw);
+      if (publicKey && privateKey) {
+        console.log("[Push] VAPID keys loaded from vapid.json");
+        return { publicKey, privateKey };
+      }
+    }
+  } catch (e) {
+    console.warn("[Push] failed to read vapid.json, regenerating:", e.message);
+  }
+
+  const keys = webpush.generateVAPIDKeys();
+  try {
+    fs.writeFileSync(
+      vapidFile,
+      JSON.stringify(
+        { publicKey: keys.publicKey, privateKey: keys.privateKey },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    console.log("[Push] VAPID keys generated and saved to vapid.json");
+  } catch (e) {
+    console.error(
+      "[Push] could not write vapid.json, keys will be ephemeral:",
+      e.message,
+    );
+  }
+  return { publicKey: keys.publicKey, privateKey: keys.privateKey };
+}
+
+const vapidKeys = loadVapidKeys();
+const VAPID_PUBLIC_KEY = vapidKeys.publicKey;
+const VAPID_PRIVATE_KEY = vapidKeys.privateKey;
+
+webpush.setVapidDetails("mailto:dev@null", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
 // SQLite
+
 const db = new Database("./relay.sqlite");
 db.pragma("journal_mode = WAL");
 db.pragma("synchronous = NORMAL");
@@ -34,65 +85,63 @@ db.exec(`
     content    TEXT NOT NULL,
     sig        TEXT NOT NULL
   );
-
   CREATE INDEX IF NOT EXISTS idx_capsules_pubkey     ON capsules(pubkey);
   CREATE INDEX IF NOT EXISTS idx_capsules_expires_at ON capsules(expires_at);
   CREATE INDEX IF NOT EXISTS idx_capsules_created_at ON capsules(created_at);
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    pubkey     TEXT PRIMARY KEY,
+    endpoint   TEXT NOT NULL,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `);
 
-// Prepared statements
 const stmtInsert = db.prepare(`
   INSERT OR IGNORE INTO capsules
     (id, pubkey, kind, created_at, expires_at, tags, pow_nonce, content, sig)
-  VALUES
-    (@id, @pubkey, @kind, @created_at, @expires_at, @tags, @pow_nonce, @content, @sig)
+  VALUES (@id,@pubkey,@kind,@created_at,@expires_at,@tags,@pow_nonce,@content,@sig)
 `);
-
 const stmtQueryByPubkey = db.prepare(`
   SELECT * FROM capsules
-  WHERE tags LIKE @pattern
-    AND (@since IS NULL OR created_at >= @since)
-  ORDER BY created_at ASC
-  LIMIT 200
+  WHERE tags LIKE @pattern AND (@since IS NULL OR created_at >= @since)
+  ORDER BY created_at ASC LIMIT 200
 `);
+const stmtQueryById = db.prepare(`SELECT * FROM capsules WHERE id = ?`);
+const stmtDeleteExpired = db.prepare(
+  `DELETE FROM capsules WHERE expires_at IS NOT NULL AND expires_at <= ?`,
+);
 
-const stmtQueryById = db.prepare(`
-  SELECT * FROM capsules WHERE id = ?
+const stmtUpsertPushSub = db.prepare(`
+  INSERT INTO push_subscriptions (pubkey, endpoint, p256dh, auth, updated_at)
+  VALUES (@pubkey, @endpoint, @p256dh, @auth, @updated_at)
+  ON CONFLICT(pubkey) DO UPDATE SET endpoint=excluded.endpoint,
+    p256dh=excluded.p256dh, auth=excluded.auth, updated_at=excluded.updated_at
 `);
-
-const stmtDeleteExpired = db.prepare(`
-  DELETE FROM capsules
-  WHERE expires_at IS NOT NULL AND expires_at <= ?
-`);
+const stmtGetPushSub = db.prepare(
+  `SELECT * FROM push_subscriptions WHERE pubkey = ?`,
+);
+const stmtDeletePushSub = db.prepare(
+  `DELETE FROM push_subscriptions WHERE pubkey = ?`,
+);
 
 // Utils
 
-/** Вычисляет expires_at по TTL-политике.
- *  kind:3 (Backup Pointer): бессрочно (NULL).
- *  Остальные: сейчас + TTL_DAYS.
- *  Если в тегах есть ["expiration", "ts"] - берём минимум.
- */
 function calcExpiresAt(kind, tags) {
   if (kind === 3) return null;
-
   const defaultExpiry = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
-
   const expirationTag = tags.find((t) => t[0] === "expiration" && t[1]);
   if (expirationTag) {
     const tagTs = parseInt(expirationTag[1], 10);
     if (!isNaN(tagTs)) return Math.min(tagTs, defaultExpiry);
   }
-
   return defaultExpiry;
 }
 
-/**
- * Проверяет PoW: первые POW_DIFFICULTY бит id должны быть нулями.
- */
 function checkPoW(idHex, difficultyBits) {
   const fullBytes = Math.floor(difficultyBits / 8);
   const remainder = difficultyBits % 8;
-
   for (let i = 0; i < fullBytes; i++) {
     if (parseInt(idHex.slice(i * 2, i * 2 + 2), 16) !== 0) return false;
   }
@@ -104,21 +153,12 @@ function checkPoW(idHex, difficultyBits) {
   return true;
 }
 
-/**
- * Верификация Капсулы:
- * 1. PoW - побитовая проверка
- * 2. Two-step hash
- * 3. Ed25519(id, sig, pubkey)
- */
 function verifyCapsule(event) {
   try {
-    // PoW
     if (!checkPoW(event.id, POW_DIFFICULTY)) {
       console.warn(`[PoW] failed for ${event.id}`);
       return false;
     }
-
-    // Hash
     const serializedBase = JSON.stringify([
       0,
       event.pubkey,
@@ -136,13 +176,10 @@ function verifyCapsule(event) {
         sodium.from_string(baseHashHex + event.pow_nonce),
       ),
     );
-
     if (finalIdHex !== event.id) {
       console.warn(`[Hash] mismatch: expected ${finalIdHex}, got ${event.id}`);
       return false;
     }
-
-    // Ed25519
     return sodium.crypto_sign_verify_detached(
       sodium.from_hex(event.sig),
       sodium.from_hex(event.id),
@@ -154,9 +191,6 @@ function verifyCapsule(event) {
   }
 }
 
-/**
- * Строит объект Capsule из строки БД
- */
 function rowToCapsule(row) {
   return {
     id: row.id,
@@ -170,19 +204,44 @@ function rowToCapsule(row) {
   };
 }
 
-/** Безопасная отправка по WebSocket
- */
 function safeSend(ws, payload) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload));
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+}
+
+// Push - отправка wake-сигнала получателям
+
+async function sendPushToRecipients(capsule) {
+  const recipients = capsule.tags
+    .filter((t) => t[0] === "p" && typeof t[1] === "string")
+    .map((t) => t[1]);
+
+  for (const pubkey of recipients) {
+    const row = stmtGetPushSub.get(pubkey);
+    if (!row) continue;
+    const subscription = {
+      endpoint: row.endpoint,
+      keys: { p256dh: row.p256dh, auth: row.auth },
+    };
+    try {
+      // payload пустой - реле не знает содержимого
+      await webpush.sendNotification(subscription, "");
+      console.log(`[Push] wake sent to ${pubkey.slice(0, 12)}…`);
+    } catch (e) {
+      if (e.statusCode === 410 || e.statusCode === 404) {
+        // Подписка истекла
+        stmtDeletePushSub.run(pubkey);
+        console.log(
+          `[Push] expired subscription removed: ${pubkey.slice(0, 12)}…`,
+        );
+      } else {
+        console.warn(`[Push] failed for ${pubkey.slice(0, 12)}: ${e.message}`);
+      }
+    }
   }
 }
 
-// Менеджер подписок
+// Subscriptions
 
-/**
- * Type: Map<pubkeyHex, Set<WebSocket>>
- */
 const subscriptions = new Map();
 
 function subscribe(pubkey, ws) {
@@ -197,17 +256,11 @@ function unsubscribeAll(ws) {
   }
 }
 
-/**
- * Адресная доставка капсул по pubkey в тегах "p"
- */
-function routeCapsule(capsule, senderWs) {
+function routeCapsule(capsule) {
   const recipients = capsule.tags
     .filter((t) => t[0] === "p" && typeof t[1] === "string")
     .map((t) => t[1]);
-
-  if (!recipients.includes(capsule.pubkey)) {
-    recipients.push(capsule.pubkey);
-  }
+  if (!recipients.includes(capsule.pubkey)) recipients.push(capsule.pubkey);
 
   const seen = new Set();
   for (const pubkey of recipients) {
@@ -221,7 +274,77 @@ function routeCapsule(capsule, senderWs) {
   }
 }
 
-// Обработчики сообщений
+// HTTP handlers
+
+function setCorsHeaders(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function handleHttpRequest(req, res) {
+  setCorsHeaders(res);
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  // VAPID public key
+  if (req.method === "GET" && req.url === "/push/vapid-public-key") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ publicKey: VAPID_PUBLIC_KEY }));
+    return;
+  }
+
+  // Push subscription registration
+  if (req.method === "POST" && req.url === "/push/subscribe") {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      try {
+        const { pubkey, subscription } = JSON.parse(body);
+        if (
+          !pubkey ||
+          !subscription?.endpoint ||
+          !subscription?.keys?.p256dh ||
+          !subscription?.keys?.auth
+        ) {
+          throw new Error("missing fields");
+        }
+        stmtUpsertPushSub.run({
+          pubkey,
+          endpoint: subscription.endpoint,
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+          updated_at: Math.floor(Date.now() / 1000),
+        });
+        console.log(`[Push] subscription registered: ${pubkey.slice(0, 12)}…`);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // Health check
+  if (req.method === "GET" && req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", port: PORT }));
+    return;
+  }
+
+  res.writeHead(404);
+  res.end();
+}
+
+// WS handlers
 
 function handleEvent(event, senderWs) {
   if (
@@ -253,7 +376,6 @@ function handleEvent(event, senderWs) {
   }
 
   const expires_at = calcExpiresAt(event.kind, event.tags);
-
   const result = stmtInsert.run({
     id: event.id,
     pubkey: event.pubkey,
@@ -269,7 +391,10 @@ function handleEvent(event, senderWs) {
   if (result.changes > 0) {
     console.log(`[+] capsule kind:${event.kind} id:${event.id.slice(0, 12)}…`);
     safeSend(senderWs, ["OK", event.id, true, ""]);
-    routeCapsule(event, senderWs);
+    routeCapsule(event);
+
+    // асинхронный wake-пуш
+    sendPushToRecipients(event).catch((e) => console.warn("[Push]", e.message));
   } else {
     safeSend(senderWs, ["OK", event.id, true, "duplicate"]);
   }
@@ -277,9 +402,7 @@ function handleEvent(event, senderWs) {
 
 function handleReq(subId, filters, ws) {
   if (filters?.["#p"]?.length > 0) {
-    for (const pubkey of filters["#p"]) {
-      subscribe(pubkey, ws);
-    }
+    for (const pubkey of filters["#p"]) subscribe(pubkey, ws);
   }
 
   if (subId === "give_me_peers") {
@@ -288,7 +411,6 @@ function handleReq(subId, filters, ws) {
     return;
   }
 
-  // DAG
   if (filters?.id) {
     const row = stmtQueryById.get(filters.id);
     if (row) safeSend(ws, ["EVENT", subId, rowToCapsule(row)]);
@@ -296,7 +418,6 @@ function handleReq(subId, filters, ws) {
     return;
   }
 
-  // Запрос истории
   const pubkey = filters?.["#p"]?.[0];
   if (!pubkey) {
     safeSend(ws, ["EOSE", subId]);
@@ -307,33 +428,23 @@ function handleReq(subId, filters, ws) {
     pattern: `%"${pubkey}"%`,
     since: filters.since ?? null,
   });
-
   console.log(
     `[REQ] sub:${subId} pubkey:${pubkey.slice(0, 12)}… - ${rows.length} capsules`,
   );
-
-  for (const row of rows) {
-    safeSend(ws, ["EVENT", subId, rowToCapsule(row)]);
-  }
+  for (const row of rows) safeSend(ws, ["EVENT", subId, rowToCapsule(row)]);
   safeSend(ws, ["EOSE", subId]);
 }
 
-// TTL-очистка
+// TTL cleanup
 
 function runCleanup() {
   const now = Math.floor(Date.now() / 1000);
   const result = stmtDeleteExpired.run(now);
-  if (result.changes > 0) {
-    console.log(
-      `[TTL] deleted ${result.changes} expired capsule(s) at ${new Date().toISOString()}`,
-    );
-  } else {
-    console.debug(`[TTL] cleanup run, nothing to delete`);
-  }
+  if (result.changes > 0)
+    console.log(`[TTL] deleted ${result.changes} capsule(s)`);
 }
 
 // Heartbeat kind:101
-// Для MVP используется ephemeral ключ
 
 let relayKeypair = null;
 
@@ -346,15 +457,10 @@ async function initRelayIdentity() {
 
 function broadcastHeartbeat(wss) {
   if (!relayKeypair) return;
-
   const now = Math.floor(Date.now() / 1000);
   const pubkey = sodium.to_hex(relayKeypair.publicKey);
   const content = JSON.stringify({ ip: RELAY_PUBLIC_IP, ts: now });
   const msgBytes = sodium.from_string(pubkey + now.toString() + content);
-  const sig = sodium.to_hex(
-    sodium.crypto_sign_detached(msgBytes, relayKeypair.privateKey),
-  );
-
   const heartbeat = {
     id: sodium.to_hex(sodium.crypto_generichash(32, msgBytes)),
     pubkey,
@@ -363,21 +469,20 @@ function broadcastHeartbeat(wss) {
     tags: [],
     pow_nonce: 0,
     content,
-    sig,
+    sig: sodium.to_hex(
+      sodium.crypto_sign_detached(msgBytes, relayKeypair.privateKey),
+    ),
   };
-
   let count = 0;
   wss.clients.forEach((ws) => {
     safeSend(ws, ["EVENT", "heartbeat", heartbeat]);
     count++;
   });
-
   if (count > 0) console.log(`[♥] heartbeat - ${count} client(s)`);
 }
 
 function sendPeerList(ws) {
   if (!relayKeypair || PEER_RELAYS.length === 0) return;
-
   const content = JSON.stringify(PEER_RELAYS);
   const msgBytes = sodium.from_string(content);
   const pex = {
@@ -404,15 +509,15 @@ async function start() {
   runCleanup();
   setInterval(runCleanup, CLEANUP_INTERVAL_MS);
 
-  const wss = new WebSocket.Server({ port: PORT });
-  console.log(`[ws] relay listening on ws://localhost:${PORT}`);
+  // Shared HTTP + WebSocket server на одном порту
+  const server = http.createServer(handleHttpRequest);
+  const wss = new WebSocket.Server({ server });
 
   setInterval(() => broadcastHeartbeat(wss), HEARTBEAT_INTERVAL_MS);
 
   wss.on("connection", (ws, req) => {
     const ip = req.socket.remoteAddress;
     console.log(`[+] client connected from ${ip}`);
-
     sendPeerList(ws);
 
     ws.on("message", (raw) => {
@@ -422,21 +527,17 @@ async function start() {
       } catch {
         return;
       }
-
       if (!Array.isArray(data) || data.length < 2) return;
-
       const [type, ...rest] = data;
-
       switch (type) {
         case "EVENT":
           handleEvent(rest[0], ws);
           break;
         case "REQ":
-          // ["REQ", subId, filters]
           handleReq(rest[0], rest[1] ?? {}, ws);
           break;
         default:
-          console.debug(`[ws] unknown message type: ${type}`);
+          console.debug(`[ws] unknown type: ${type}`);
       }
     });
 
@@ -444,11 +545,14 @@ async function start() {
       unsubscribeAll(ws);
       console.log(`[-] client disconnected from ${ip}`);
     });
-
     ws.on("error", (err) => {
       console.error(`[ws] error from ${ip}:`, err.message);
       unsubscribeAll(ws);
     });
+  });
+
+  server.listen(PORT, () => {
+    console.log(`[ws+http] relay listening on port ${PORT}`);
   });
 }
 

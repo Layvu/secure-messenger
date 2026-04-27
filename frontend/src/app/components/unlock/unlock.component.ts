@@ -5,6 +5,9 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
 import { StorageService } from '../../core/services/storage.service';
 import { RelayPoolService } from '../../core/services/relay-pool.service';
+import { PushService } from '../../core/services/push.service';
+import { firstValueFrom } from 'rxjs';
+import { NotificationNavigationService } from '../../core/services/notification-navigation.service';
 
 @Component({
   selector: 'app-unlock',
@@ -19,6 +22,8 @@ export class UnlockComponent {
   private readonly identity = inject(IdentityService);
   private readonly storage = inject(StorageService);
   private readonly relayPool = inject(RelayPoolService);
+  private readonly pushService = inject(PushService);
+  private readonly notificationNav = inject(NotificationNavigationService);
 
   readonly pin = signal('');
   readonly error = signal('');
@@ -53,6 +58,17 @@ export class UnlockComponent {
       if (identityDoc) this.identity.setUsername(identityDoc.username);
 
       this.relayPool.notifyUserLoggedIn();
+
+      if (this.pushService.isSupported()) {
+        this.pushService.requestPermission().catch(() => {});
+      }
+
+      // Переход по уведомлению, если флаг был установлен
+      if (sessionStorage.getItem('dm_open_latest_chat') === '1') {
+        sessionStorage.removeItem('dm_open_latest_chat');
+        await this.notificationNav.navigateToLatestChat();
+        return;
+      }
 
       const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/chats';
       await this.router.navigateByUrl(returnUrl, { replaceUrl: true });

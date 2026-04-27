@@ -178,7 +178,7 @@ export class AddContactComponent {
       const params: Record<string, string> = { pubkey: invite.pubkey };
       this.router.navigate(['/add'], { queryParams: params });
     } else {
-      this.scanError.set('QR-код не является invite-ссылкой D-Messenger');
+      this.scanError.set('QR-код не является invite-ссылкой DM');
     }
   }
 }
